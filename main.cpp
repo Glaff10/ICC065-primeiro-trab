@@ -5,12 +5,21 @@
 #include <iostream>
 #include <memory>
 #include <vector>
+#include <sys/ioctl.h>
 #include <string.h>
+#include <unistd.h>
 
 using namespace std;
 
-// Comando "cat"
-void read_file(string path, string filename, int lines_to_read = -1, bool descending = false) {
+int get_terminal_lines() {
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    return w.ws_row;
+}
+
+vector<string> read_file(string path, string filename) {
+    string result;
     vector<string> lines;
 
     string filepath = path + filename;
@@ -23,27 +32,68 @@ void read_file(string path, string filename, int lines_to_read = -1, bool descen
 
     source.close();
 
+    return lines;
+}
+
+int show_lines(string path, string filename, int start = 0, int end = -1, bool descending = false) {
+    vector<string> lines = read_file(path, filename);
+
+    if (start >= lines.size()) {
+        return 0;
+    }
+
     if(descending) {
         reverse(lines.begin(), lines.end());
     }
 
-    int i = 0;
-    for(vector<string>::iterator it = lines.begin(); it != lines.end(); ++it, ++i) {
-        if(i == lines_to_read) break;
-        cout << *it << endl;
+    int i = start;
+    if(end >= lines.size()) {
+        end = lines.size();
     }
+    
+    for(vector<string>::iterator it = lines.begin() + start; it != lines.end(); ++it, ++i) {
+        if(i == end) break;
+        cout << *it;
+        if(i != end - 1) {
+            cout << endl;
+        }
+    }
+
+    return 1;
+}
+
+void cat(string path, string filename) {
+    show_lines(path, filename);
 }
 
 // Comando "more"
+void more(string path, string filename, int lines_per_page = -1) {
+    if(lines_per_page == -1) {
+        lines_per_page = get_terminal_lines();
+    }
+
+    int start = 0;
+    int end = lines_per_page;
+
+    int current_page = 1;
+
+    while(show_lines(path, filename, start, end)) {
+        cin.ignore();
+
+        start = lines_per_page * current_page;
+        end = start + lines_per_page;
+        current_page++;
+    }
+}
 
 // Comando "head"
 void head(string path, string filename, int lines_to_read) {
-    read_file(path, filename, lines_to_read);
+    show_lines(path, filename, 0, lines_to_read, false);
 }
 
 // Comando "tail"
 void tail(string path, string filename, int lines_to_read) {
-    read_file(path, filename, lines_to_read, true);
+    show_lines(path, filename, 0, lines_to_read, true);
 }
 
 // Chamando um programa e esperando sua execução
@@ -55,22 +105,28 @@ void run_program(string program_path) {
         throw std::runtime_error("popen() failed!");
     }
     while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
-        result += buffer.data();
+        cout << buffer.data();
     }
-    cout << result;
 }
 
 int main() {
+    string path = "/home/gasmartin/dev/pita/";
+    string filename = "teste.txt";
+
     cout << "Using cat..." << endl;
-    read_file("/home/gasmartin/dev/pita/", "teste.txt");
+    cat(path, filename);
     cout << endl;
 
     cout << "Using head..." << endl;
-    head("/home/gasmartin/dev/pita/", "teste.txt", 10);
+    head(path, filename, 10);
     cout << endl;
 
     cout << "Using tail..." << endl;
-    tail("/home/gasmartin/dev/pita/", "teste.txt", 5);
+    tail(path, filename, 5);
+    cout << endl;
+
+    cout << "Using more..." << endl;
+    more(path, filename);
     cout << endl;
 
     cout << "Using run_program..." << endl;
