@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h> 
+#include <sys/stat.h>
+#include<dirent.h>
 
 using namespace std;
 
@@ -100,6 +102,31 @@ void tail(string path, string filename, int lines_to_read) {
     show_lines(path, filename, 0, lines_to_read, true);
 }
 
+//Comando "ls"
+void ls(string dirname = "."){
+    DIR *dir;
+    struct dirent *files;
+
+    dir = opendir(dirname.c_str());
+    if(dir == nullptr){
+        cout << "directory not found\n";
+        return;
+    }
+    while((files = readdir(dir)) != nullptr){
+        cout << files->d_name << endl;
+    }
+}
+
+//Comando "pwd"
+void pwd(){
+    cout << getcwd(nullptr, 200) << endl;
+}
+
+//Comando "cd"
+void cd(string dirname){
+    chdir(dirname.c_str());
+    pwd();
+}
 // Chamando um programa e esperando sua execução
 void run_program(string program_path) {
     array<char, 128> buffer;
@@ -256,6 +283,8 @@ int main() {
     // cout << "Using run_program..." << endl;
     // run_program("./program.sh");
     // cout << endl;
+    cd("..");
+    ls(".");
 
     return 0;
 }
