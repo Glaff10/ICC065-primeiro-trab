@@ -8,8 +8,12 @@
 #include <sys/ioctl.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h> 
 
 using namespace std;
+
+char dir[FILENAME_MAX];
 
 int get_terminal_lines() {
     struct winsize w;
@@ -109,29 +113,149 @@ void run_program(string program_path) {
     }
 }
 
+void run_commands(vector<string> command, int stdout_pipe[2]=NULL){
+    for(int i = command.size()-1; i>=0; i--) {
+        if(command[i]=="&") {
+            //aqui é pra rodar o que tiver em args e retornar pro futuro, e chamar um fork pro que rolar antes do &
+            int rc = fork();
+            if(rc < 0){
+                fprintf(stderr, "Erro no fork\n");
+                exit(1);
+            }else if(rc == 0){
+                vector<string> child_command(command.begin(), command.begin()+i);
+                run_commands(child_command);
+                kill(getpid(), SIGTERM);
+            }else{
+                signal(SIGCHLD, SIG_IGN);
+                rc = fork();
+                if(rc<0) {
+                    fprintf(stderr,"Erro no fork\n");
+                }
+                else if(rc==0) {
+                    int saved_stdout=-1;
+                    if(stdout_pipe!=NULL) {
+                        saved_stdout = dup(1);
+                        dup2(stdout_pipe[1],1);
+                    }
+                    vector<string> args(command.begin()+i+1, command.end());
+                    //runCommand(args);
+                    if(saved_stdout!=-1) dup2(saved_stdout,1);
+                    kill(getpid(), SIGTERM);
+                }
+                else {
+                    int wc = waitpid(rc,NULL,0);
+                    if(stdout_pipe!=NULL) {
+                        close(stdout_pipe[1]);
+                    }
+
+                }
+            }
+            return;
+        }
+        else if(command[i]=="|") {
+            vector<string> child_command(command.begin(), command.begin()+i);
+            int pipefd[2];
+
+            pipe(pipefd);
+            run_commands(child_command,pipefd);
+
+            int rc = fork();
+
+            if(rc < 0){
+                cout << "Fork Failed\n";
+                exit(1);
+            } else if(rc == 0){
+                int saved_stdout=-1;
+                int saved_stdin=-1;
+                if(stdout_pipe!=NULL) {
+                    saved_stdout = dup(1);
+                    dup2(stdout_pipe[1],1);
+                }
+                saved_stdin=dup(0);
+                dup2(pipefd[0],0);
+
+                vector<string> args(command.begin()+i+1, command.end());
+                
+                //runCommand(args);
+                dup2(saved_stdin,0);
+                close(pipefd[0]);
+
+                if(saved_stdout!=-1) dup2(saved_stdout,1);
+                kill(getpid(), SIGTERM);
+            }
+            else {
+                int wc = wait(NULL);
+                if(stdout_pipe!=NULL) {
+                    close(stdout_pipe[1]);
+                }
+            }
+            return;
+        }
+    }
+
+    if(command.size()){
+    
+        if(command[0] == "cd"){
+    	    //runCommand(command);
+	        return;
+        }
+
+        if(command[0] == "quit"){
+    	    //PROCESS = false;
+	        return;
+        }
+    }
+
+    int rc = fork();
+    if(rc < 0){
+        cout << "Fork Failed\n";
+        exit(1);
+    } else if(rc == 0){
+        int saved_stdout=-1;
+        if(stdout_pipe!=NULL) {
+            saved_stdout = dup(1);
+            dup2(stdout_pipe[1],1);
+        }
+        //runCommand(command);
+        if(saved_stdout!=-1) dup2(saved_stdout,1);
+        kill(getpid(), SIGTERM);
+    }
+    else {
+        int wc = wait(NULL);
+        if(stdout_pipe!=NULL) {
+            close(stdout_pipe[1]);
+        }
+    }
+
+    return;
+}
+
+
+
 int main() {
-    string path = "/home/gasmartin/dev/pita/";
+
+    getcwd(dir,sizeof(dir));
     string filename = "teste.txt";
 
-    cout << "Using cat..." << endl;
-    cat(path, filename);
-    cout << endl;
+    // cout << "Using cat..." << endl;
+    // cat(path, filename);
+    // cout << endl;
 
-    cout << "Using head..." << endl;
-    head(path, filename, 10);
-    cout << endl;
+    // cout << "Using head..." << endl;
+    // head(path, filename, 10);
+    // cout << endl;
 
-    cout << "Using tail..." << endl;
-    tail(path, filename, 5);
-    cout << endl;
+    // cout << "Using tail..." << endl;
+    // tail(path, filename, 5);
+    // cout << endl;
 
-    cout << "Using more..." << endl;
-    more(path, filename);
-    cout << endl;
+    // cout << "Using more..." << endl;
+    // more(path, filename);
+    // cout << endl;
 
-    cout << "Using run_program..." << endl;
-    run_program("./program.sh");
-    cout << endl;
+    // cout << "Using run_program..." << endl;
+    // run_program("./program.sh");
+    // cout << endl;
 
     return 0;
 }
